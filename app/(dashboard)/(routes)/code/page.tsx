@@ -1,0 +1,137 @@
+"use client";
+import Heading from "@/components/heading";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
+import { Code } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { AIAvatar } from "@/components/ai-avatar";
+import { Empty } from "@/components/empty";
+import { Loader } from "@/components/loader";
+import { UserAvatar } from "@/components/user-avatar";
+import { cn } from "@/lib/utils";
+import { ChatCompletionRequestMessage } from "openai";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import ReactMarkdown from "react-markdown";
+import * as z from "zod";
+import { formSchema } from "./constants";
+
+const CodePage = () => {
+  const router = useRouter();
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      prompt: "",
+    },
+  });
+  const [messages, setMessages] = useState<ChatCompletionRequestMessage[]>([]);
+  const isLoading = form.formState.isSubmitting;
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const userMessage: ChatCompletionRequestMessage = {
+        role: "user",
+        content: values.prompt,
+      };
+      const newMessages = [...messages, userMessage];
+
+      const response = await axios.post("/api/conversation", {
+        messages: newMessages,
+      });
+      setMessages((current) => [...current, userMessage, response.data]);
+      form.reset();
+    } catch (error: any) {
+      console.log(error);
+    } finally {
+      router.refresh();
+    }
+  };
+  return (
+    <div>
+      <Heading
+        title="Code Generation"
+        description="Your code assistant."
+        icon={Code}
+        iconColor="text-green-500"
+        bgColor="bg-green-500/10"
+      />
+      <div className="px-4 lg:px-8">
+        <div>
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="w-full p-4 px-3 grid grid-cols-12 gap-2 border rounded-lg md:px-6 focus-within:shadow-sm"
+            >
+              <FormField
+                name="prompt"
+                render={({ field }) => (
+                  <FormItem className="col-span-12 lg:col-span-10">
+                    <FormControl className="p-0 m-0">
+                      <Input
+                        className="border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent"
+                        disabled={isLoading}
+                        placeholder="Create simple button component with Next.js"
+                        {...field}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <Button
+                className="w-full col-span-12 lg:col-span-2"
+                disabled={isLoading}
+              >
+                Generate
+              </Button>
+            </form>
+          </Form>
+        </div>
+        <div className="mt-4 space-y-4">
+          {isLoading && (
+            <div className="w-full flex items-center justify-center bg-muted rounded-lg p-8">
+              <Loader label="Please wait, AI thinking... " />
+            </div>
+          )}
+          {messages.length === 0 && !isLoading && (
+            <Empty label="Conversation not yet started." />
+          )}
+          <div className="flex flex-col-reverse gap-y-4">
+            {messages.map((message) => (
+              <div
+                className={cn(
+                  "flex items-center w-full gap-x-8 rounded-lg p-8",
+                  message.role === "user"
+                    ? "bg-white border border-black/10"
+                    : "bg-muted"
+                )}
+                key={message.content}
+              >
+                {message.role === "user" ? <UserAvatar /> : <AIAvatar />}
+                <ReactMarkdown
+                  components={{
+                    pre: ({ node, ...props }) => (
+                      <div className="w-full bg-black/10 my-2 p-5 rounded-lg overflow-auto">
+                        <pre {...props} />
+                      </div>
+                    ),
+                    code: ({ node, ...props }) => (
+                      <code className="bg-black/10 rounded lg p-2" {...props} />
+                    ),
+                  }}
+                  className="text-sm leading-7 overflow-hidden"
+                >
+                  {message.content || ""}
+                </ReactMarkdown>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CodePage;
